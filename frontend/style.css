@@ -136,14 +136,63 @@ button:disabled {
 /* Game Screen - New Layout */
 .game-layout {
   display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+}
+
+.game-content {
+  display: flex;
   gap: 20px;
   justify-content: center;
   align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.game-layout > .controls-info {
+  width: 100%;
+  max-width: 900px;
 }
 
 /* Main Game Area */
 .main-game-area {
   flex: 0 0 auto;
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+}
+
+/* Piece Preview Boxes (Hold and Next) */
+.piece-preview-box {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 12px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  width: 100px;
+}
+
+.piece-preview-box h4 {
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.piece-preview-box canvas {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  background: #000;
+  display: block;
+  margin: 0 auto;
+}
+
+.hold-box {
+  align-self: flex-start;
+}
+
+.next-box {
+  align-self: flex-start;
 }
 
 .main-player-board {
@@ -152,6 +201,7 @@ button:disabled {
   padding: 20px;
   border-radius: 15px;
   box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+  flex: 0 0 auto;
 }
 
 .main-player-name {
@@ -340,7 +390,7 @@ button:disabled {
 
 /* Responsive Design */
 @media (max-width: 1024px) {
-  .game-layout {
+  .game-content {
     flex-direction: column;
     align-items: center;
   }
@@ -351,9 +401,14 @@ button:disabled {
     max-width: 500px;
   }
 
-  .main-tetris-canvas {
-    width: 250px;
-    height: 500px;
+  .main-game-area {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .piece-preview-box {
+    display: inline-block;
+    margin: 0 10px;
   }
 }
 

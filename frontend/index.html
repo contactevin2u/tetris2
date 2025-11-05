@@ -31,8 +31,15 @@
     <!-- Game Screen -->
     <div id="game-screen" class="screen hidden">
       <div class="game-layout">
-        <!-- Main Player Board -->
-        <div class="main-game-area">
+        <div class="game-content">
+          <!-- Main Player Board -->
+          <div class="main-game-area">
+          <!-- Hold Piece Preview -->
+          <div class="piece-preview-box hold-box">
+            <h4>Hold (C)</h4>
+            <canvas id="hold-canvas" width="80" height="80"></canvas>
+          </div>
+
           <div class="main-player-board">
             <h2 class="main-player-name">You</h2>
             <canvas id="main-canvas" class="main-tetris-canvas" width="300" height="600"></canvas>
@@ -41,8 +48,11 @@
               <div class="main-lines">Lines: <span id="main-lines">0</span></div>
             </div>
           </div>
-          <div class="controls-info">
-            <p><strong>Controls:</strong> ← → Move | ↓ Soft Drop | ↑ Rotate | Space Hard Drop</p>
+
+          <!-- Next Piece Preview -->
+          <div class="piece-preview-box next-box">
+            <h4>Next</h4>
+            <canvas id="next-canvas" width="80" height="80"></canvas>
           </div>
         </div>
 
@@ -67,6 +77,11 @@
               <!-- Opponent boards will be added dynamically -->
             </div>
           </div>
+        </div>
+      </div>
+
+      <div class="controls-info">
+          <p><strong>Controls:</strong> ← → Move | ↓ Soft Drop | ↑ Rotate | Space Hard Drop | C Hold</p>
         </div>
       </div>
     </div>
