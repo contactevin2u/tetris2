@@ -2,9 +2,11 @@ import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import cors from 'cors';
+import { db } from './database.js';
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
@@ -19,10 +21,89 @@ const io = new Server(httpServer, {
 // Store active game rooms
 const rooms = new Map();
 const MAX_PLAYERS = 4;
+const gameStartTimes = new Map(); // Track when games start
 
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', rooms: rooms.size });
+});
+
+// REST API Endpoints for Leaderboard
+
+// Get top scores (all-time)
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 100;
+    const scores = await db.getTopScores(limit);
+    res.json({ success: true, data: scores });
+  } catch (error) {
+    console.error('Error fetching leaderboard:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch leaderboard' });
+  }
+});
+
+// Get today's top scores
+app.get('/api/leaderboard/today', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 10;
+    const scores = await db.getTodayTopScores(limit);
+    res.json({ success: true, data: scores });
+  } catch (error) {
+    console.error('Error fetching today\'s leaderboard:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch today\'s leaderboard' });
+  }
+});
+
+// Submit score to leaderboard
+app.post('/api/leaderboard', async (req, res) => {
+  try {
+    const { playerName, score, lines, gameDuration, roomId } = req.body;
+
+    if (!playerName || score === undefined) {
+      return res.status(400).json({ success: false, error: 'Player name and score are required' });
+    }
+
+    const result = await db.addScore(
+      playerName,
+      parseInt(score) || 0,
+      parseInt(lines) || 0,
+      parseInt(gameDuration) || 0,
+      roomId || null
+    );
+
+    // Get player's rank
+    const rank = await db.getPlayerRank(result.score);
+
+    res.json({
+      success: true,
+      data: { ...result, rank }
+    });
+  } catch (error) {
+    console.error('Error adding score:', error);
+    res.status(500).json({ success: false, error: 'Failed to add score' });
+  }
+});
+
+// Get player's best score
+app.get('/api/player/:playerName', async (req, res) => {
+  try {
+    const { playerName } = req.params;
+    const bestScore = await db.getPlayerBestScore(playerName);
+
+    if (!bestScore) {
+      return res.json({ success: true, data: null, message: 'No scores found for this player' });
+    }
+
+    const rank = await db.getPlayerRank(bestScore.score);
+
+    res.json({
+      success: true,
+      data: { ...bestScore, rank }
+    });
+  } catch (error) {
+    console.error('Error fetching player score:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch player score' });
+  }
 });
 
 io.on('connection', (socket) => {
@@ -94,6 +175,7 @@ io.on('connection', (socket) => {
       // Start game if all players are ready
       if (room.players.every(p => p.ready) && room.players.length >= 1) {
         room.gameState = 'playing';
+        gameStartTimes.set(roomId, Date.now()); // Track game start time
         io.to(roomId).emit('game-start');
       }
     }
@@ -140,9 +222,35 @@ io.on('connection', (socket) => {
       const alivePlayers = room.players.filter(p => p.alive);
       if (alivePlayers.length <= 1) {
         room.gameState = 'finished';
+
+        // Calculate game duration
+        const gameStartTime = gameStartTimes.get(roomId) || Date.now();
+        const gameDuration = Math.floor((Date.now() - gameStartTime) / 1000); // in seconds
+
+        // Save all players' scores to database
+        room.players.forEach(async (player) => {
+          const playerScore = room.scores[player.id] || 0;
+          try {
+            await db.addScore(
+              player.name,
+              playerScore,
+              0, // lines - will be sent from client in future
+              gameDuration,
+              roomId
+            );
+            console.log(`Saved score for ${player.name}: ${playerScore}`);
+          } catch (error) {
+            console.error(`Error saving score for ${player.name}:`, error);
+          }
+        });
+
+        // Clean up game start time
+        gameStartTimes.delete(roomId);
+
         io.to(roomId).emit('game-finished', {
           winner: alivePlayers[0]?.id,
-          scores: room.scores
+          scores: room.scores,
+          gameDuration
         });
       }
     }
@@ -206,6 +314,24 @@ function findAvailableRoom() {
 }
 
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+
+// Initialize database and start server
+async function startServer() {
+  try {
+    // Initialize database (create tables if they don't exist)
+    await db.initialize();
+    console.log('Database initialized');
+
+    // Start HTTP server
+    httpServer.listen(PORT, () => {
+      console.log(`Server running on port ${PORT}`);
+      console.log(`WebSocket server ready`);
+      console.log(`REST API available at http://localhost:${PORT}/api`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
