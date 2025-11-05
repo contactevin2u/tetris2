@@ -35,7 +35,11 @@ let gameActive = false;
 let myGame = null;
 
 // Initialize socket connection immediately
-socket = io(BACKEND_URL);
+socket = io(BACKEND_URL, {
+  transports: ['websocket', 'polling'],
+  reconnectionAttempts: 5,
+  timeout: 10000
+});
 
 socket.on('connect', () => {
   console.log('Connected to server');
