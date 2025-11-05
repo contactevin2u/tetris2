@@ -1,0 +1,254 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: #fff;
+}
+
+#app {
+  width: 100%;
+  max-width: 1400px;
+  padding: 20px;
+}
+
+.screen {
+  text-align: center;
+}
+
+.screen.hidden {
+  display: none;
+}
+
+h1 {
+  font-size: 3rem;
+  margin-bottom: 2rem;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+h2 {
+  font-size: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Lobby */
+.lobby-form {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 2rem;
+  border-radius: 15px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.lobby-form input {
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 15px;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  background: rgba(255, 255, 255, 0.9);
+}
+
+button {
+  padding: 12px 30px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 8px;
+  background: #4CAF50;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s;
+  font-weight: bold;
+}
+
+button:hover {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+}
+
+#lobby-status {
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Waiting Room */
+#waiting-room {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 2rem;
+  border-radius: 15px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+#players-list {
+  margin: 2rem 0;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.player-item {
+  padding: 10px;
+  margin: 5px 0;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.player-item.ready {
+  background: rgba(76, 175, 80, 0.3);
+}
+
+#ready-btn {
+  margin-right: 10px;
+}
+
+#leave-btn {
+  background: #f44336;
+}
+
+#leave-btn:hover {
+  background: #da190b;
+}
+
+/* Game Screen */
+.game-container {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1200px) {
+  .game-container {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .game-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.player-board {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 15px;
+  border-radius: 10px;
+  transition: all 0.3s;
+}
+
+.player-board.active {
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+  transform: scale(1.05);
+}
+
+.player-board.dead {
+  opacity: 0.5;
+  filter: grayscale(100%);
+}
+
+.player-name {
+  margin-bottom: 10px;
+  font-size: 1.2rem;
+}
+
+.tetris-canvas {
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  background: #000;
+  display: block;
+  margin: 0 auto;
+}
+
+.player-stats {
+  margin-top: 10px;
+  font-size: 0.9rem;
+}
+
+.player-stats .score {
+  margin-bottom: 5px;
+}
+
+.player-stats .status {
+  padding: 5px;
+  border-radius: 5px;
+  background: rgba(76, 175, 80, 0.3);
+}
+
+.player-stats .status.dead {
+  background: rgba(244, 67, 54, 0.3);
+}
+
+.controls-info {
+  text-align: center;
+  padding: 15px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  margin-top: 10px;
+}
+
+/* Game Over */
+#game-over {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  padding: 3rem;
+  border-radius: 15px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+#winner-info {
+  font-size: 1.5rem;
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: rgba(255, 215, 0, 0.2);
+  border-radius: 8px;
+}
+
+#final-scores {
+  margin-bottom: 2rem;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.score-item {
+  padding: 10px;
+  margin: 5px 0;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 5px;
+  display: flex;
+  justify-content: space-between;
+}
+
+#play-again-btn {
+  background: #2196F3;
+}
+
+#play-again-btn:hover {
+  background: #0b7dda;
+}
