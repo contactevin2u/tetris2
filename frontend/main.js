@@ -2,7 +2,8 @@ import { io } from 'socket.io-client';
 
 // Configuration
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
-const BLOCK_SIZE = 20;
+const BLOCK_SIZE = 15; // Smaller for main canvas
+const OPPONENT_BLOCK_SIZE = 8; // Even smaller for opponent canvases
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 20;
 
@@ -30,9 +31,14 @@ const COLORS = {
 // Game state
 let socket = null;
 let myPlayerId = null;
+let myPlayerName = 'Anonymous';
 let currentRoom = null;
 let gameActive = false;
 let myGame = null;
+let opponentGames = new Map();
+let allPlayers = new Map();
+let gameStartTime = null;
+let timerInterval = null;
 
 // Initialize socket connection immediately
 socket = io(BACKEND_URL, {
@@ -65,12 +71,14 @@ socket.on('connect_error', (error) => {
 
 // Tetris Game Class
 class TetrisGame {
-  constructor(canvas, playerId) {
+  constructor(canvas, playerId, blockSize = BLOCK_SIZE) {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.playerId = playerId;
+    this.blockSize = blockSize;
     this.board = this.createBoard();
     this.score = 0;
+    this.lines = 0;
     this.currentPiece = null;
     this.gameOver = false;
     this.lastMoveTime = 0;
@@ -148,7 +156,14 @@ class TetrisGame {
     }
 
     if (linesCleared > 0) {
+      this.lines += linesCleared;
       this.score += linesCleared * 100;
+
+      // Update UI
+      if (this.isMyGame) {
+        document.getElementById('main-score').textContent = this.score;
+        document.getElementById('main-lines').textContent = this.lines;
+      }
 
       // Send attack to other players if cleared 2+ lines
       if (this.isMyGame && linesCleared >= 2) {
@@ -227,6 +242,8 @@ class TetrisGame {
   }
 
   draw() {
+    const bs = this.blockSize;
+
     // Clear canvas
     this.ctx.fillStyle = '#000';
     this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -236,7 +253,7 @@ class TetrisGame {
       for (let x = 0; x < BOARD_WIDTH; x++) {
         if (this.board[y][x]) {
           this.ctx.fillStyle = this.board[y][x];
-          this.ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+          this.ctx.fillRect(x * bs, y * bs, bs - 1, bs - 1);
         }
       }
     }
@@ -247,9 +264,9 @@ class TetrisGame {
       for (let y = 0; y < this.currentPiece.shape.length; y++) {
         for (let x = 0; x < this.currentPiece.shape[y].length; x++) {
           if (this.currentPiece.shape[y][x]) {
-            const drawX = (this.currentPiece.x + x) * BLOCK_SIZE;
-            const drawY = (this.currentPiece.y + y) * BLOCK_SIZE;
-            this.ctx.fillRect(drawX, drawY, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+            const drawX = (this.currentPiece.x + x) * bs;
+            const drawY = (this.currentPiece.y + y) * bs;
+            this.ctx.fillRect(drawX, drawY, bs - 1, bs - 1);
           }
         }
       }
@@ -257,16 +274,17 @@ class TetrisGame {
 
     // Draw grid
     this.ctx.strokeStyle = '#333';
+    this.ctx.lineWidth = 0.5;
     for (let x = 0; x <= BOARD_WIDTH; x++) {
       this.ctx.beginPath();
-      this.ctx.moveTo(x * BLOCK_SIZE, 0);
-      this.ctx.lineTo(x * BLOCK_SIZE, BOARD_HEIGHT * BLOCK_SIZE);
+      this.ctx.moveTo(x * bs, 0);
+      this.ctx.lineTo(x * bs, BOARD_HEIGHT * bs);
       this.ctx.stroke();
     }
     for (let y = 0; y <= BOARD_HEIGHT; y++) {
       this.ctx.beginPath();
-      this.ctx.moveTo(0, y * BLOCK_SIZE);
-      this.ctx.lineTo(BOARD_WIDTH * BLOCK_SIZE, y * BLOCK_SIZE);
+      this.ctx.moveTo(0, y * bs);
+      this.ctx.lineTo(BOARD_WIDTH * bs, y * bs);
       this.ctx.stroke();
     }
   }
@@ -276,6 +294,7 @@ class TetrisGame {
       board: this.board,
       currentPiece: this.currentPiece,
       score: this.score,
+      lines: this.lines,
       gameOver: this.gameOver
     };
   }
@@ -284,8 +303,103 @@ class TetrisGame {
     this.board = state.board;
     this.currentPiece = state.currentPiece;
     this.score = state.score;
+    this.lines = state.lines || 0;
     this.gameOver = state.gameOver;
   }
+}
+
+// Timer functions
+function startTimer() {
+  gameStartTime = Date.now();
+  timerInterval = setInterval(updateTimer, 1000);
+}
+
+function updateTimer() {
+  if (!gameActive || !gameStartTime) return;
+
+  const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
+  const minutes = Math.floor(elapsed / 60);
+  const seconds = elapsed % 60;
+
+  document.getElementById('game-timer').textContent =
+    `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+function stopTimer() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+}
+
+// Scoreboard functions
+function updateScoreboard(scores) {
+  const scoreboardList = document.getElementById('scoreboard-list');
+
+  // Convert scores object to array with player names
+  const scoreArray = Object.entries(scores).map(([playerId, score]) => ({
+    playerId,
+    name: allPlayers.get(playerId) || 'Player',
+    score
+  }));
+
+  // Sort by score descending
+  scoreArray.sort((a, b) => b.score - a.score);
+
+  // Update scoreboard HTML
+  scoreboardList.innerHTML = '';
+  scoreArray.forEach((player, index) => {
+    const div = document.createElement('div');
+    div.className = 'scoreboard-item';
+
+    // Add rank classes
+    if (index === 0) div.classList.add('rank-1');
+    else if (index === 1) div.classList.add('rank-2');
+    else if (index === 2) div.classList.add('rank-3');
+
+    // Highlight current player
+    if (player.playerId === myPlayerId) {
+      div.classList.add('current-player');
+    }
+
+    div.innerHTML = `
+      <span class="scoreboard-rank">#${index + 1}</span>
+      <span class="scoreboard-name">${player.name}${player.playerId === myPlayerId ? ' (You)' : ''}</span>
+      <span class="scoreboard-score">${player.score}</span>
+    `;
+
+    scoreboardList.appendChild(div);
+  });
+}
+
+// Create opponent board
+function createOpponentBoard(playerId, playerName) {
+  const opponentBoardsContainer = document.getElementById('opponent-boards');
+
+  const boardDiv = document.createElement('div');
+  boardDiv.className = 'opponent-board';
+  boardDiv.id = `opponent-${playerId}`;
+
+  const canvas = document.createElement('canvas');
+  canvas.className = 'opponent-canvas';
+  canvas.width = BOARD_WIDTH * OPPONENT_BLOCK_SIZE;
+  canvas.height = BOARD_HEIGHT * OPPONENT_BLOCK_SIZE;
+
+  boardDiv.innerHTML = `
+    <div class="opponent-name">${playerName}</div>
+  `;
+  boardDiv.appendChild(canvas);
+  boardDiv.innerHTML += `
+    <div class="opponent-stats">Score: <span class="opp-score">0</span></div>
+  `;
+
+  opponentBoardsContainer.appendChild(boardDiv);
+
+  // Create game instance for this opponent
+  const game = new TetrisGame(canvas, playerId, OPPONENT_BLOCK_SIZE);
+  opponentGames.set(playerId, game);
+
+  return game;
 }
 
 // UI Management
@@ -309,6 +423,7 @@ document.getElementById('join-btn').addEventListener('click', () => {
   }
 
   const playerName = document.getElementById('player-name').value.trim() || 'Anonymous';
+  myPlayerName = playerName;
   const roomId = document.getElementById('room-id').value.trim() || null;
 
   socket.emit('join-room', { playerName, roomId });
@@ -332,6 +447,11 @@ document.getElementById('play-again-btn').addEventListener('click', () => {
 // Socket event handlers
 socket.on('room-update', ({ roomId, players, gameState }) => {
   currentRoom = roomId;
+
+  // Store all players
+  players.forEach(player => {
+    allPlayers.set(player.id, player.name);
+  });
 
   document.getElementById('room-info').innerHTML = `
     <h3>Room ID: ${roomId}</h3>
@@ -361,45 +481,40 @@ socket.on('game-start', () => {
   gameActive = true;
   showScreen('gameScreen');
   startGame();
+  startTimer();
 });
 
-socket.on('player-update', ({ playerId, board, currentPiece, score }) => {
-  // Update other players' boards
-  const playerBoards = Array.from(document.querySelectorAll('.player-board'));
-  playerBoards.forEach((boardEl, index) => {
-    if (boardEl.dataset.playerId === playerId) {
-      const canvas = boardEl.querySelector('.tetris-canvas');
-      const game = new TetrisGame(canvas, playerId);
-      game.setState({ board, currentPiece, score, gameOver: false });
-      game.draw();
+socket.on('player-update', ({ playerId, board, currentPiece, score, lines }) => {
+  if (playerId === myPlayerId) return; // Don't update our own board
 
-      const scoreEl = boardEl.querySelector('.score span');
-      scoreEl.textContent = score;
-    }
-  });
+  // Get or create opponent game
+  let game = opponentGames.get(playerId);
+  if (!game) {
+    const playerName = allPlayers.get(playerId) || 'Player';
+    game = createOpponentBoard(playerId, playerName);
+  }
+
+  // Update game state
+  game.setState({ board, currentPiece, score, lines: lines || 0, gameOver: false });
+  game.draw();
+
+  // Update score in opponent stats
+  const oppBoard = document.getElementById(`opponent-${playerId}`);
+  if (oppBoard) {
+    const scoreEl = oppBoard.querySelector('.opp-score');
+    if (scoreEl) scoreEl.textContent = score;
+  }
 });
 
 socket.on('scores-update', (scores) => {
-  const playerBoards = Array.from(document.querySelectorAll('.player-board'));
-  playerBoards.forEach(boardEl => {
-    const playerId = boardEl.dataset.playerId;
-    if (playerId && scores[playerId] !== undefined) {
-      const scoreEl = boardEl.querySelector('.score span');
-      scoreEl.textContent = scores[playerId];
-    }
-  });
+  updateScoreboard(scores);
 });
 
 socket.on('player-died', (playerId) => {
-  const playerBoards = Array.from(document.querySelectorAll('.player-board'));
-  playerBoards.forEach(boardEl => {
-    if (boardEl.dataset.playerId === playerId) {
-      boardEl.classList.add('dead');
-      const statusEl = boardEl.querySelector('.status');
-      statusEl.textContent = 'Dead';
-      statusEl.classList.add('dead');
-    }
-  });
+  const oppBoard = document.getElementById(`opponent-${playerId}`);
+  if (oppBoard) {
+    oppBoard.classList.add('dead');
+  }
 });
 
 socket.on('receive-attack', (lines) => {
@@ -410,22 +525,32 @@ socket.on('receive-attack', (lines) => {
 
 socket.on('game-finished', ({ winner, scores }) => {
   gameActive = false;
+  stopTimer();
 
   const winnerInfo = document.getElementById('winner-info');
   if (winner === myPlayerId) {
     winnerInfo.innerHTML = '<h3>🏆 You Won! 🏆</h3>';
   } else {
-    winnerInfo.innerHTML = '<h3>Game Over</h3>';
+    const winnerName = allPlayers.get(winner) || 'Player';
+    winnerInfo.innerHTML = `<h3>Game Over! ${winnerName} Won!</h3>`;
   }
 
   const finalScores = document.getElementById('final-scores');
   finalScores.innerHTML = '<h3>Final Scores:</h3>';
-  Object.entries(scores).forEach(([playerId, score]) => {
+
+  // Sort scores
+  const scoreArray = Object.entries(scores).map(([playerId, score]) => ({
+    playerId,
+    name: allPlayers.get(playerId) || 'Player',
+    score
+  })).sort((a, b) => b.score - a.score);
+
+  scoreArray.forEach(player => {
     const div = document.createElement('div');
     div.className = 'score-item';
     div.innerHTML = `
-      <span>Player ${playerId === myPlayerId ? '(You)' : ''}</span>
-      <span>${score}</span>
+      <span>${player.name} ${player.playerId === myPlayerId ? '(You)' : ''}</span>
+      <span>${player.score}</span>
     `;
     finalScores.appendChild(div);
   });
@@ -435,24 +560,27 @@ socket.on('game-finished', ({ winner, scores }) => {
 
 // Game initialization
 function startGame() {
-  const playerBoards = Array.from(document.querySelectorAll('.player-board'));
-
-  // Set up my game board (first available or create first)
-  const myBoardIndex = 0; // Use first board for now
-  const myBoard = playerBoards[myBoardIndex];
-  myBoard.classList.add('active');
-  myBoard.dataset.playerId = myPlayerId;
-
-  const canvas = myBoard.querySelector('.tetris-canvas');
-  myGame = new TetrisGame(canvas, myPlayerId);
+  // Set up main player board
+  const mainCanvas = document.getElementById('main-canvas');
+  myGame = new TetrisGame(mainCanvas, myPlayerId, BLOCK_SIZE);
   myGame.isMyGame = true;
 
-  // Hide unused boards
-  playerBoards.forEach((board, index) => {
-    if (index > 0) {
-      board.dataset.playerId = `player-${index}`;
+  // Update player name
+  document.querySelector('.main-player-name').textContent = myPlayerName;
+
+  // Create opponent boards for all other players
+  allPlayers.forEach((name, playerId) => {
+    if (playerId !== myPlayerId) {
+      createOpponentBoard(playerId, name);
     }
   });
+
+  // Initialize scoreboard
+  const initialScores = {};
+  allPlayers.forEach((name, playerId) => {
+    initialScores[playerId] = 0;
+  });
+  updateScoreboard(initialScores);
 
   // Start game loop
   gameLoop();
@@ -472,7 +600,8 @@ function gameLoop(timestamp = 0) {
       socket.emit('game-update', {
         board: state.board,
         currentPiece: state.currentPiece,
-        score: state.score
+        score: state.score,
+        lines: state.lines
       });
     }
   }
