@@ -92,7 +92,7 @@ io.on('connection', (socket) => {
       });
 
       // Start game if all players are ready
-      if (room.players.every(p => p.ready) && room.players.length >= 2) {
+      if (room.players.every(p => p.ready) && room.players.length >= 1) {
         room.gameState = 'playing';
         io.to(roomId).emit('game-start');
       }
