@@ -4,8 +4,10 @@ import { io } from 'socket.io-client';
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000';
 const BLOCK_SIZE = 15; // Smaller for main canvas
 const OPPONENT_BLOCK_SIZE = 8; // Even smaller for opponent canvases
+const PREVIEW_BLOCK_SIZE = 16; // Block size for preview canvases
 const BOARD_WIDTH = 10;
 const BOARD_HEIGHT = 20;
+const GAME_DURATION = 180; // 3 minutes in seconds
 
 // Tetromino shapes
 const SHAPES = {
@@ -80,11 +82,16 @@ class TetrisGame {
     this.score = 0;
     this.lines = 0;
     this.currentPiece = null;
+    this.nextPiece = null; // Next piece preview
+    this.holdPiece = null; // Hold piece feature
+    this.canHold = true; // Can only hold once per piece
     this.gameOver = false;
     this.lastMoveTime = 0;
     this.moveInterval = 1000; // 1 second
     this.isMyGame = false;
 
+    // Generate next piece and spawn current piece
+    this.nextPiece = this.generatePiece();
     this.spawnPiece();
   }
 
@@ -92,15 +99,41 @@ class TetrisGame {
     return Array.from({ length: BOARD_HEIGHT }, () => Array(BOARD_WIDTH).fill(0));
   }
 
-  spawnPiece() {
+  // Generate a new random piece
+  generatePiece() {
     const shapes = Object.keys(SHAPES);
     const randomShape = shapes[Math.floor(Math.random() * shapes.length)];
-    this.currentPiece = {
+    return {
       shape: SHAPES[randomShape],
       color: COLORS[randomShape],
+      type: randomShape,
       x: Math.floor(BOARD_WIDTH / 2) - 1,
       y: 0
     };
+  }
+
+  spawnPiece() {
+    // Move next piece to current and generate new next piece
+    if (this.nextPiece) {
+      this.currentPiece = {
+        ...this.nextPiece,
+        x: Math.floor(BOARD_WIDTH / 2) - 1,
+        y: 0
+      };
+    } else {
+      this.currentPiece = this.generatePiece();
+    }
+
+    // Generate new next piece
+    this.nextPiece = this.generatePiece();
+
+    // Reset hold flag when new piece spawns
+    this.canHold = true;
+
+    // Draw next piece preview
+    if (this.isMyGame) {
+      this.drawNextPiece();
+    }
 
     if (this.collision()) {
       this.gameOver = true;
@@ -232,6 +265,42 @@ class TetrisGame {
     this.spawnPiece();
   }
 
+  // Hold piece feature - swap current piece with held piece
+  hold() {
+    if (this.gameOver || !this.canHold) return;
+
+    if (this.holdPiece) {
+      // Swap current piece with hold piece
+      const temp = this.currentPiece;
+      this.currentPiece = {
+        ...this.holdPiece,
+        x: Math.floor(BOARD_WIDTH / 2) - 1,
+        y: 0
+      };
+      this.holdPiece = {
+        shape: temp.shape,
+        color: temp.color,
+        type: temp.type
+      };
+    } else {
+      // Store current piece and spawn next
+      this.holdPiece = {
+        shape: this.currentPiece.shape,
+        color: this.currentPiece.color,
+        type: this.currentPiece.type
+      };
+      this.spawnPiece();
+    }
+
+    // Can't hold again until piece locks
+    this.canHold = false;
+
+    // Draw hold piece preview
+    if (this.isMyGame) {
+      this.drawHoldPiece();
+    }
+  }
+
   update(timestamp) {
     if (this.gameOver || !this.isMyGame) return;
 
@@ -289,6 +358,64 @@ class TetrisGame {
     }
   }
 
+  // Draw a piece preview centered in a canvas
+  drawPiecePreview(canvas, piece) {
+    if (!canvas || !piece) return;
+
+    const ctx = canvas.getContext('2d');
+    const bs = PREVIEW_BLOCK_SIZE;
+
+    // Clear canvas
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Calculate piece dimensions
+    const pieceWidth = piece.shape[0].length;
+    const pieceHeight = piece.shape.length;
+
+    // Center the piece in the 80x80 canvas
+    const offsetX = (canvas.width - pieceWidth * bs) / 2;
+    const offsetY = (canvas.height - pieceHeight * bs) / 2;
+
+    // Draw the piece
+    ctx.fillStyle = piece.color;
+    for (let y = 0; y < piece.shape.length; y++) {
+      for (let x = 0; x < piece.shape[y].length; x++) {
+        if (piece.shape[y][x]) {
+          ctx.fillRect(
+            offsetX + x * bs,
+            offsetY + y * bs,
+            bs - 1,
+            bs - 1
+          );
+        }
+      }
+    }
+  }
+
+  // Draw next piece on next-canvas
+  drawNextPiece() {
+    const nextCanvas = document.getElementById('next-canvas');
+    if (nextCanvas && this.nextPiece) {
+      this.drawPiecePreview(nextCanvas, this.nextPiece);
+    }
+  }
+
+  // Draw hold piece on hold-canvas
+  drawHoldPiece() {
+    const holdCanvas = document.getElementById('hold-canvas');
+    if (holdCanvas) {
+      if (this.holdPiece) {
+        this.drawPiecePreview(holdCanvas, this.holdPiece);
+      } else {
+        // Clear canvas if no hold piece
+        const ctx = holdCanvas.getContext('2d');
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, holdCanvas.width, holdCanvas.height);
+      }
+    }
+  }
+
   getState() {
     return {
       board: this.board,
@@ -308,21 +435,40 @@ class TetrisGame {
   }
 }
 
-// Timer functions
+// Timer functions - 3-minute countdown
 function startTimer() {
   gameStartTime = Date.now();
   timerInterval = setInterval(updateTimer, 1000);
+  updateTimer(); // Update immediately to show 03:00
 }
 
 function updateTimer() {
   if (!gameActive || !gameStartTime) return;
 
+  // Calculate time remaining (countdown from 180 seconds)
   const elapsed = Math.floor((Date.now() - gameStartTime) / 1000);
-  const minutes = Math.floor(elapsed / 60);
-  const seconds = elapsed % 60;
+  const remaining = Math.max(0, GAME_DURATION - elapsed);
 
-  document.getElementById('game-timer').textContent =
+  const minutes = Math.floor(remaining / 60);
+  const seconds = remaining % 60;
+
+  const timerElement = document.getElementById('game-timer');
+  timerElement.textContent =
     `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+  // Turn timer red when less than 30 seconds remain
+  if (remaining < 30) {
+    timerElement.style.color = '#f44336';
+  } else {
+    timerElement.style.color = '#4CAF50';
+  }
+
+  // End game when timer reaches 0
+  if (remaining <= 0 && myGame && !myGame.gameOver) {
+    myGame.gameOver = true;
+    socket.emit('game-over');
+    stopTimer();
+  }
 }
 
 function stopTimer() {
@@ -632,6 +778,11 @@ document.addEventListener('keydown', (e) => {
       break;
     case ' ':
       myGame.hardDrop();
+      e.preventDefault();
+      break;
+    case 'c':
+    case 'C':
+      myGame.hold();
       e.preventDefault();
       break;
   }
