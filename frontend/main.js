@@ -34,6 +34,31 @@ let currentRoom = null;
 let gameActive = false;
 let myGame = null;
 
+// Initialize socket connection immediately
+socket = io(BACKEND_URL);
+
+socket.on('connect', () => {
+  console.log('Connected to server');
+  myPlayerId = socket.id;
+  const joinBtn = document.getElementById('join-btn');
+  joinBtn.disabled = false;
+  joinBtn.textContent = 'Join Game';
+  document.getElementById('lobby-status').textContent = '✓ Connected to server';
+  document.getElementById('lobby-status').style.color = '#4CAF50';
+});
+
+socket.on('disconnect', () => {
+  console.log('Disconnected from server');
+  document.getElementById('lobby-status').textContent = '✗ Disconnected from server';
+  document.getElementById('lobby-status').style.color = '#f44336';
+});
+
+socket.on('connect_error', (error) => {
+  console.error('Connection error:', error);
+  document.getElementById('lobby-status').textContent = '✗ Cannot connect to server. Is the backend running?';
+  document.getElementById('lobby-status').style.color = '#f44336';
+});
+
 // Tetris Game Class
 class TetrisGame {
   constructor(canvas, playerId) {
@@ -274,6 +299,11 @@ function showScreen(screenName) {
 
 // Lobby handlers
 document.getElementById('join-btn').addEventListener('click', () => {
+  if (!socket || !socket.connected) {
+    alert('Not connected to server. Please wait...');
+    return;
+  }
+
   const playerName = document.getElementById('player-name').value.trim() || 'Anonymous';
   const roomId = document.getElementById('room-id').value.trim() || null;
 
@@ -295,14 +325,7 @@ document.getElementById('play-again-btn').addEventListener('click', () => {
   location.reload();
 });
 
-// Socket.io connection
-socket = io(BACKEND_URL);
-
-socket.on('connect', () => {
-  console.log('Connected to server');
-  myPlayerId = socket.id;
-});
-
+// Socket event handlers
 socket.on('room-update', ({ roomId, players, gameState }) => {
   currentRoom = roomId;
 
